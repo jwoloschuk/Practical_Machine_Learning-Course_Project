@@ -1,0 +1,120 @@
+---
+title: "Coursera_Machine_Learning-Course_Project"
+author: "Jordan Woloschuk"
+date: "10/28/2019"
+output: html_document
+---
+
+## 1) Executive Summary
+
+### 1.1) Overview
+
+
+The purpose of this analysis is to develop a model that will be able to predict 
+what exercise was preformed using a dataset with 159 features.
+
+This analysis will detail the steps taken in the following sections:
+
+
+1. Executive Summary
+2. Data Processing
+3. Exploratory Data Analysis
+4. Model Selection
+5. Model Examination 
+6. Conclusion
+
+## 2) Data Processing
+
+### 2.0) Loading Libraries
+
+Load necessary libraries for data analysis and developing results.
+```{r Libraries, warning=FALSE, message=FALSE}
+library(lattice)
+library(ggplot2)
+library(plyr)
+library(randomForest)
+library(caret)
+```
+
+### 2.1) Loading Data Files
+
+Load necessary ftiness data files.
+```{r Data, warning=FALSE, message=FALSE}
+training.raw <- read.csv("pml-training.csv")
+testing.raw <- read.csv("pml-testing.csv")
+```
+
+
+### 2.2) Exploratory Data Analysis
+
+```{r Expo_Data}
+head(training.raw,2) # Sample of the first 2 rows of data
+dim(training.raw) # Dimensions of the mtcars_data
+```
+
+From this analysis we can see that a large number of cell are empty / contain NA.
+
+### 2.3) Modifying Data 
+
+First remove all columns which have more than 20% of the rows empty or NA. 
+```{r Remove_NA} 
+max_NA = 20 # arbitrary 
+NA_count <- nrow(training.raw) / 100 * max_NA
+remove_columns <- which(colSums(is.na(training.raw) | training.raw=="") > NA_count)
+training.cleaned <- training.raw[,-remove_columns]
+testing.cleaned <- testing.raw[,-remove_columns]
+```
+
+Second, we will remove all time series related data since we will not be using 
+this data in the analysis.
+```{r Remove_time} 
+remove_columns <- grep("timestamp", names(training.cleaned))
+training.cleaned <- training.cleaned[,-c(1, remove_columns )]
+testing.cleaned <- testing.cleaned[,-c(1, remove_columns )]
+```
+
+Fianlly, we will convert all factors to integers. 
+```{r Integers}
+classeLevels <- levels(training.cleaned$classe)
+training.cleaned <- data.frame(data.matrix(training.cleaned))
+training.cleaned$classe <- factor(training.cleaned$classe, labels=classeLevels)
+testing.cleaned <- data.frame(data.matrix(testing.cleaned))
+```
+
+## 3) Exploratory Data Analysis
+
+We will split the training set into a "test and train" set to develop the model, 
+since the origional test set is for final validation of the
+
+```{r New_test/train}
+set.seed(12345)
+
+classe_index <- which(names(training.cleaned) == "classe")
+partition <- createDataPartition(y=training.cleaned$classe, p=0.75, list=FALSE)
+training.subTrain <- training.cleaned[partition, ]
+training.subTest <- training.cleaned[-partition, ]
+```
+
+We will now identify some of the fields with high correlations with the classe?
+
+```{r classe_correlation}
+correlations <- cor(training.subTrain[, -classe_index], as.numeric(training.subTrain$classe))
+best_Correlations <- subset(as.data.frame(as.table(correlations)), abs(Freq)>0.3)
+print(best_Correlations)
+```
+
+
+
+### 1.2) Conclusion
+
+The analysis conducted indicates that holding all other variables equal, a car with
+manual transmission will have a higher MPG and therefore better fuel economy. 
+
+The *final_model* determined that a car's MPG was dependent on the transmission 
+type, weight of the car and the acceleration of the car (1/4 mile time). This model
+indicates that cars with manual transmission will have ~2.94 more miles per gallon
+comapred to a car with an automatic transmissions. However, since cars with 
+automatic transmission tend to weigh more compared to cars with manual transmission
+this interation could be influencing the final result. 
+
+
