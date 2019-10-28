@@ -19,9 +19,8 @@ This analysis will detail the steps taken in the following sections:
 1. Executive Summary
 2. Data Processing
 3. Exploratory Data Analysis
-4. Model Selection
-5. Model Examination 
-6. Conclusion
+4. Model Development
+5. Conclusion
 
 ## 2) Data Processing
 
@@ -34,6 +33,7 @@ library(ggplot2)
 library(plyr)
 library(randomForest)
 library(caret)
+library(Rmisc)
 ```
 
 ### 2.1) Loading Data Files
@@ -103,18 +103,22 @@ best_Correlations <- subset(as.data.frame(as.table(correlations)), abs(Freq)>0.3
 print(best_Correlations)
 ```
 
+From this, we can see that the best correlations with classe result in an 
+frequency of 0.35. We will now check visually if there is a possible simple
+linear predictors based on these two features.
 
+```{r Rmisc_Plots}
 
-### 1.2) Conclusion
+plot_1 <- ggplot(training.subTrain, aes(classe, magnet_arm_x)) + 
+        geom_boxplot(aes(fill=classe))
+plot_2 <- ggplot(training.subTrain, aes(classe,pitch_forearm)) + 
+        geom_boxplot(aes(fill=classe))
 
-The analysis conducted indicates that holding all other variables equal, a car with
-manual transmission will have a higher MPG and therefore better fuel economy. 
+multiplot(plot_1,plot_2,cols=2)
+```
 
-The *final_model* determined that a car's MPG was dependent on the transmission 
-type, weight of the car and the acceleration of the car (1/4 mile time). This model
-indicates that cars with manual transmission will have ~2.94 more miles per gallon
-comapred to a car with an automatic transmissions. However, since cars with 
-automatic transmission tend to weigh more compared to cars with manual transmission
-this interation could be influencing the final result. 
+From these plots it can be seen that there is no seperation of classes possible 
+using only these two 'highly' correlated features. We will need to train a model 
+to get closer to a way of predicting the classes.
 
-
+## 3) Model Development
