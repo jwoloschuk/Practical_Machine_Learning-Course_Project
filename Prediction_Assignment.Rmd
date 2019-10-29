@@ -2,7 +2,7 @@
 title: "Coursera_Machine_Learning-Course_Project"
 author: "Jordan Woloschuk"
 date: "10/28/2019"
-output: html_document
+output: github_document
 ---
 
 ## 1) Executive Summary
