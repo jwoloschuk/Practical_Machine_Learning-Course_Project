@@ -1,0 +1,8 @@
+base
+lattice
+ggplot2
+plyr
+randomForest
+caret
+Rmisc
+corrplot

@@ -34,6 +34,8 @@ library(plyr)
 library(randomForest)
 library(caret)
 library(Rmisc)
+library(corrplot)
+library(randomForest)
 ```
 
 ### 2.1) Loading Data Files
@@ -47,9 +49,9 @@ testing.raw <- read.csv("pml-testing.csv")
 
 ### 2.2) Exploratory Data Analysis
 
-```{r Expo_Data}
+```{r Expo_Data, results='hide'}
 head(training.raw,2) # Sample of the first 2 rows of data
-dim(training.raw) # Dimensions of the mtcars_data
+dim(training.raw) # Dimensions of the training data
 ```
 
 From this analysis we can see that a large number of cell are empty / contain NA.
@@ -121,4 +123,177 @@ From these plots it can be seen that there is no seperation of classes possible
 using only these two 'highly' correlated features. We will need to train a model 
 to get closer to a way of predicting the classes.
 
-## 3) Model Development
+## 4) Model Development
+
+### 4.1) Model Selection
+
+We will now try to identify which variables have high correlations amongst each
+other in our set, so that we can possibly exclude these redundent varaibles
+from the pca or training. 
+
+We will then check to see if the removal of these variables results in a model 
+that is more accurate.
+
+```{r Correlations}
+correlation_matrix <- cor(training.subTrain[, -classe_index])
+highly_correlated <- findCorrelation(correlation_matrix, cutoff=0.9, exact=TRUE)
+exclude_columns <- c(highly_correlated, classe_index)
+corrplot(correlation_matrix, method="color", type="lower", order="hclust", tl.cex=0.70, tl.col="black", tl.srt = 45, diag = FALSE)
+```
+
+From this plot we can see that some features that are very correlated with each
+other. The model that we develop will excluded these redundent features. Also 
+we'll attempt to reduce the total number of features by running PCA on all features
+and the excluded subset of the features.
+
+```{r PCA}
+#All data
+pca_PreProcess.all <- preProcess(training.subTrain[, -classe_index], method = "pca", thresh = 0.99)
+training.subTrain.pca.all <- predict(pca_PreProcess.all, training.subTrain[, -classe_index])
+training.subTest.pca.all <- predict(pca_PreProcess.all, training.subTest[, -classe_index])
+testing.pca.all <- predict(pca_PreProcess.all, testing.cleaned[, -classe_index])
+#Subset data
+pca_PreProcess.subset <- preProcess(training.subTrain[, -exclude_columns], method = "pca", thresh = 0.99)
+training.subSetTrain.pca.subset <- predict(pca_PreProcess.subset, training.subTrain[, -exclude_columns])
+training.subSetTest.pca.subset <- predict(pca_PreProcess.subset, training.subTest[, -exclude_columns])
+testing.pca.subset <- predict(pca_PreProcess.subset, testing.cleaned[, -classe_index])
+```
+
+Next, we will do some Random Forest training. In this process we will use 100 trees,
+from trial and error, it appears that the error rate doesn't significantly decline
+with more than 50 trees. 
+
+
+We'll use 200 trees, because I've already seen that the error rate doesn't decline a lot after say 50 trees, but we still want to be thorough.
+Also we will time each of the 4 random forest models to see if when all else is equal one pops out as the faster one.
+
+```{r RandomForest_Training 1}
+ntree <- 100 #Our assumed number of trials
+# Forest 1
+start <- proc.time()
+rf_Model.cleaned_1 <- randomForest(
+  x=training.subTrain[, -classe_index], 
+  y=training.subTrain$classe,
+  xtest=training.subTest[, -classe_index], 
+  ytest=training.subTest$classe, 
+  ntree=ntree,
+  keep.forest=TRUE,
+  proximity=TRUE) #do.trace=TRUE
+proc.time() - start
+
+```
+
+```{r RandomForest_Training 2}
+ntree <- 100 #Our assumed number of trials
+# Forest 2
+start <- proc.time()
+rf_Model.exclude_2 <- randomForest(
+  x=training.subTrain[, -exclude_columns], 
+  y=training.subTrain$classe,
+  xtest=training.subTest[, -exclude_columns], 
+  ytest=training.subTest$classe, 
+  ntree=ntree,
+  keep.forest=TRUE,
+  proximity=TRUE) #do.trace=TRUE
+proc.time() - start
+```
+
+```{r RandomForest_Training 3}
+ntree <- 100 #Our assumed number of trials
+# Forest 3
+start <- proc.time()
+rf_Model.pca.all_3 <- randomForest(
+  x=training.subTrain.pca.all, 
+  y=training.subTrain$classe,
+  xtest=training.subTest.pca.all, 
+  ytest=training.subTest$classe, 
+  ntree=ntree,
+  keep.forest=TRUE,
+  proximity=TRUE) #do.trace=TRUE
+proc.time() - start
+```
+
+```{r RandomForest_Training 4}
+ntree <- 100 #Our assumed number of trials
+# Forest 4
+start <- proc.time()
+rf_Model.pca.subset_4 <- randomForest(
+  x=training.subSetTrain.pca.subset, 
+  y=training.subTrain$classe,
+  xtest=training.subSetTest.pca.subset, 
+  ytest=training.subTest$classe, 
+  ntree=ntree,
+  keep.forest=TRUE,
+  proximity=TRUE) #do.trace=TRUE
+proc.time() - start
+```
+
+### 4.2) Model Evaluation
+
+We will now check the accuracies of the the four developed models. 
+
+```{r Model1_Check} 
+rf_Model.cleaned_1
+rf_Model.cleaned.training.acc <- round(1-sum(rf_Model.cleaned_1$confusion[, 'class.error']),3)
+paste("Training Accuracy: ",rf_Model.cleaned.training.acc)
+rf_Model.cleaned.testing.acc <- round(1-sum(rf_Model.cleaned_1$test$confusion[, 'class.error']),3)
+paste("Testing Accuracy: ",rf_Model.cleaned.testing.acc)
+```
+
+```{r Model2_Check}
+rf_Model.exclude_2
+rf_Model.exclude.training.acc <- round(1-sum(rf_Model.exclude_2$confusion[, 'class.error']),3)
+paste("Training Accuracy: ",rf_Model.exclude.training.acc)
+rf_Model.exclude.testing.acc <- round(1-sum(rf_Model.exclude_2$test$confusion[, 'class.error']),3)
+paste("Testing Accuracy: ",rf_Model.exclude.testing.acc)
+```
+
+```{r Model3_Check}
+rf_Model.pca.all_3
+rf_Model.pca.all.training.acc <- round(1-sum(rf_Model.pca.all_3$confusion[, 'class.error']),3)
+paste("Training Accuracy: ",rf_Model.pca.all.training.acc)
+rf_Model.pca.all.testing.acc <- round(1-sum(rf_Model.pca.all_3$test$confusion[, 'class.error']),3)
+paste("Testing Accuracy: ",rf_Model.pca.all.testing.acc)
+```
+
+```{r Model4_Check}
+rf_Model.pca.subset_4
+rf_Model.pca.subset.training.acc <- round(1-sum(rf_Model.pca.subset_4$confusion[, 'class.error']),3)
+paste("Training Accuracy: ",rf_Model.pca.subset.training.acc)
+rf_Model.pca.subset.testing.acc <- round(1-sum(rf_Model.pca.subset_4$test$confusion[, 'class.error']),3)
+paste("Testing Accuracy: ",rf_Model.pca.subset.testing.acc)
+```
+
+## 5) Conclusion
+
+This concludes that PCA doesn't have a positive impact on the accuracy and 
+processing time. The `rf_Model.exclude_2` performs the best compared to the other
+models (Although it is about the same as the `rf_Model.cleaned_1` model, just faster.
+
+Thereforem `rf_Model.exclude_2` is the best model for predicting the test set. 
+This model resulted in an accuracy of 98.4% and an estimated OOB error rate of 0.29%. 
+
+We will examine this model in a number of plots.
+
+```{r Model_2_plots}
+par(mfrow=c(1,2)) 
+varImpPlot(rf_Model.exclude_2, cex=0.7, pch=16, main='Variable Importance Plot: Model 2')
+plot(rf_Model.exclude_2, , cex=0.7, main='Error vs Number of Trees Plot')
+par(mfrow=c(1,1)) 
+```
+
+### 5.1) Results
+
+We will now examine the predictions for all four models on the final test set. 
+
+```{r}
+predictions <- t(cbind(
+    Exclude_2 =as.data.frame(predict(rf_Model.exclude_2, testing.cleaned[, -exclude_columns]), optional=TRUE),
+    cleaned_1 =as.data.frame(predict(rf_Model.cleaned_1, testing.cleaned), optional=TRUE),
+    pcaAll_3 =as.data.frame(predict(rf_Model.pca.all_3, testing.pca.all), optional=TRUE),
+    pcaExclude_4 =as.data.frame(predict(rf_Model.pca.subset_4, testing.pca.subset), optional=TRUE)
+))
+predictions
+```
+
+From these results, it can be seen that the results do not vary across the four models. 
